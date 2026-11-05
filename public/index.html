@@ -33,7 +33,7 @@ async function api(path,method='GET',body){
   if(!response.ok)throw new Error(data.error||'Request failed');
   return data;
 }
-if(user.role=='Customer'){location.href='/customer-dashboard.html';return}
+if(user&&user.role=='Customer'){location.href='/customer-dashboard.html';}
 function logout(){localStorage.removeItem('tok');localStorage.removeItem('me');token=null;user=null;start()}
 function table(rows,columns,actions){
   if(!rows.length)return '<div class="empty">Nothing here yet.</div>';
