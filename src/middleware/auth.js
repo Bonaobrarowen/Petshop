@@ -6,6 +6,9 @@ exports.auth = (q, s, n) => { // authMiddleware: verifies the bearer token
   catch { s.status(401).json({ error: 'Please sign in' }); }
 };
 exports.role = r => (q, s, n) => q.user.role === r ? n() : s.status(403).json({ error: `${r} access required` }); // roleMiddleware
+exports.staffOnly = (q, s, n) => q.user.role === 'Customer'
+  ? s.status(403).json({ error: 'Staff access required' })
+  : n(); // roleMiddleware
 exports.errorHandler = (e, q, s, n) => {
   const status = e.status || (/constraint/i.test(e.message) ? 400 : 500);
   if (status === 500) app.log(`${q.method} ${q.url} ${e.stack}`, 'error.log');
