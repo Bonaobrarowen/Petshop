@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pet Shop Grooming</title>
+  <style>
+    :root{--bg:#f3f5f7;--card:#fff;--text:#18212b;--muted:#66717d;--accent:#14606e;--border:#dce3e8;--danger:#b3261e}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}#root{min-height:100vh;display:flex}
+    nav{width:210px;min-height:100vh;background:var(--card);border-right:1px solid var(--border);padding:16px 10px;display:flex;flex-direction:column}
+    nav b{padding:5px 10px 15px;font-size:17px}nav a{padding:8px 10px;border-radius:6px;color:var(--muted);cursor:pointer}nav a.on{background:var(--accent);color:white}
+    nav .me{margin-top:auto;border-top:1px solid var(--border);padding-top:12px}nav #logout{display:block;text-align:center;background:#14606e;color:white;font-weight:bold;border-radius:6px}
+    main{flex:1;min-width:0;padding:24px}form,.row{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px}
+    label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:13px}input,select{min-width:130px;padding:8px;border:1px solid var(--border);border-radius:6px;background:white;color:var(--text);font:inherit}
+    button{padding:8px 14px;border:0;border-radius:6px;background:var(--accent);color:white;font:inherit;cursor:pointer}button.small{padding:4px 8px;font-size:13px}button.delete{border:1px solid var(--border);background:white;color:var(--danger)}
+    .scroll{overflow:auto;background:white;border:1px solid var(--border);border-radius:8px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}th{color:var(--muted)}
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.stat,.card{padding:14px;background:white;border:1px solid var(--border);border-radius:8px}.stat strong{font-size:28px;display:block}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.empty{padding:20px;color:var(--muted)}.alert{padding:10px;border-radius:6px;margin-bottom:12px}.success{background:#dff4e4;color:#246b34}.error{background:#ffd9d5;color:#9d2b23}
+    .auth-shell{width:100%;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.login-card{width:min(380px,100%);padding:24px;background:white;border:1px solid var(--border);border-radius:10px}.login-card h1,.login-card h2{text-align:center}.login-card form{flex-direction:column;align-items:stretch}.login-card label,.login-card button,.login-card input{width:100%}.switch{text-align:center;color:var(--muted);margin-top:14px}.switch a{color:var(--accent);font-weight:bold;cursor:pointer}
+    .product-results{max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:6px}.product-results button{display:block;width:100%;text-align:left;background:white;color:var(--text);border-radius:0}
+    @media(max-width:700px){#root{display:block}nav{width:100%;min-height:auto;flex-direction:column;border-right:0;border-bottom:1px solid var(--border)}nav a{display:block}nav .me{width:100%;margin-top:12px}main{padding:16px}}
+  </style>
+</head>
+<body><div id="root"></div>
+<script>
+let token=localStorage.getItem('tok'),user=JSON.parse(localStorage.getItem('me')||'null'),main=null,current=null,cart=[];
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(path,method='GET',body){
+  const response=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:body===undefined?undefined:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({}));
+  if(response.status==401){logout();throw new Error('Please log in again')}
+  if(!response.ok)throw new Error(data.error||'Request failed');
+  return data;
+}
+function logout(){localStorage.removeItem('tok');localStorage.removeItem('me');token=null;user=null;start()}
+function table(rows,columns,actions){
+  if(!rows.length)return '<div class="empty">Nothing here yet.</div>';
+  return `<div class="scroll"><table><thead><tr>${columns.map(c=>`<th>${esc(c.replace(/_/g,' '))}</th>`).join('')}${actions?'<th></th>':''}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(c=>`<td>${esc(r[c])}</td>`).join('')}${actions?`<td>${actions(r)}</td>`:''}</tr>`).join('')}</tbody></table></div>`;
+}
+const servicePrices={'Full Grooming Package':850,'Basic Shower & Blow Dry':450,'Nail Trimming & Filing':150,'Ear Cleaning & Plucking':150,'Anti-Flea & Tick Treatment':350,'De-Shedding & De-Matting':300,'Teeth Brushing & Breath Care':120,'Puppy / Kitten First Bath':300};
+const definitions={
+  customers:{title:'Customer history',columns:['customer_identity','customer_id','full_name','phone','email','address','pet_count','grooming_count','sales_count'],fields:[['customer_identity','Customer ID'],['full_name','Full name'],['phone','Phone'],['email','Email','email'],['address','Address']]},
+  pets:{title:'Pet history',columns:['pet_id','name','species','breed','age','owner_customer_id','owner_name','owner_phone'],fields:[['customer_id','Customer ID / Owner'],['name','Pet name'],['species','Species'],['breed','Breed'],['age','Age','number']]},
+  products:{title:'Inventory',columns:['product_id','name','category','price','stock_quantity','reorder_level','barcode'],fields:[['name','Product name'],['category','Category','select',['Food','Grooming','Accessories','Treats','Health & Care','Toys','Cleaning & Hygiene','Pet Supplies']],['price','Price','number'],['stock_quantity','Stock','number'],['reorder_level','Reorder level','number'],['barcode','Barcode']]},
+  appointments:{title:'Grooming history',columns:['appointment_id','pet_id','pet_name','owner_customer_id','owner_name','owner_phone','service','appointment_date','price','status'],fields:[['pet_id','Pet'],['service','Service'],['appointment_date','Date and time','datetime-local'],['price','Price','number']]},
+  pickups:{title:'Pet pickup',columns:['pickup_id','pet_id','person_name','relationship','contact','id_presented','authorization_status','released_at'],fields:[['pet_id','Pet ID','number'],['person_name','Authorized person'],['relationship','Relationship'],['contact','Contact number'],['id_presented','ID presented?','number'],['authorization_status','Verification status']]},
+  users:{title:'Users',columns:['user_id','username','full_name','role','status'],fields:[['username','Username'],['full_name','Full name'],['password','Password','password'],['role','Role','select',['Staff','Administrator']],['status','Status','select',['Active','Inactive']]]}
+};
+async function dashboard(){clearInterval(window.dashboardClock);const d=await api('/dashboard');main.innerHTML=`<h2>Dashboard</h2><p id="clock"></p><div class="stats">${[['appointments_today','Grooming today'],['sales_today','Sales today'],['low_stock','Low-stock items'],['customers','Customers'],['pets','Pets']].map(([key,label])=>`<div class="stat"><strong>${d[key]}</strong><span>${label}</span></div>`).join('')}</div>`;
+  const update=()=>{if($('#clock'))$('#clock').textContent='Current date and time: '+new Date().toLocaleString()};
+  update();window.dashboardClock=setInterval(update,1000)
+}
+async function lowStock(){main.innerHTML='<h2>Low stock</h2>'+table(await api('/low-stock'),['product_id','name','stock_quantity','reorder_level'])}
+async function salesHistory(){main.innerHTML='<h2>Sales history</h2>'+table(await api('/sales'),['sold_products','sale_date','customer','customer_pets','cashier','method','reference_number','total_amount'])}
+async function backup(){
+  const files=await api('/admin/backups');
+  main.innerHTML=`<h2>Database backup and recovery</h2><div class="row"><button id="create-backup">Create backup</button></div>${table(files.map(file=>({file})),['file'],row=>`<button class="small" data-restore="${esc(row.file)}">Restore</button>`)}<h3>System log</h3><pre id="system-log"></pre>`;
+  $('#create-backup').onclick=async()=>{try{await api('/admin/backup','POST');backup()}catch(error){alert(error.message)}};
+  main.onclick=async event=>{
+    const button=event.target.closest('[data-restore]');
+    if(button&&confirm('Restore this backup? The server may restart.'))try{await api('/admin/restore','POST',{file:button.dataset.restore})}catch(error){alert(error.message)}
+  };
+  try{const log=await api('/admin/logs');$('#system-log').textContent=log.lines?.join('\n')||'No log entries.'}catch{}
+}
+async function pos(){
+  const products=await api('/products'),customers=await api('/customers'),categories=[...new Set(products.map(p=>p.category).filter(Boolean))];
+  main.innerHTML=`<h2>Point of sale</h2><div class="row"><label>Product type<select id="category"><option value="">All product types</option>${categories.map(c=>`<option>${esc(c)}</option>`).join('')}</select></label><label>Search by product name<input id="search" autocomplete="off"><div id="results" class="product-results" style="display:none"></div></label><label>Quantity<input id="quantity" type="number" min="1" value="1"></label><button id="add">Add to cart</button></div><div id="cart"></div><div class="row"><label>Customer ID (optional)<input id="customer" placeholder="Walk-in if blank"></label><label>Payment<select id="method"><option>Cash</option><option>Card</option><option>GCash</option></select></label><div id="gcash" class="row" style="display:none"><label>GCash account name<input id="account"></label><label>GCash reference number<input id="reference" maxlength="13" inputmode="numeric" pattern="[0-9]{13}"></label></div><button id="complete">Complete sale</button></div>`;
+  let selected=null;
+  const draw=()=>{main.querySelector('#cart').innerHTML=cart.length?table(cart.map(i=>({...i,subtotal:i.price*i.qty})),['name','price','qty','subtotal'])+`<p><b>Total: ${cart.reduce((s,i)=>s+i.price*i.qty,0).toFixed(2)}</b></p>`:'<div class="empty">Cart is empty.</div>'};
+  const filter=()=>{
+    const type=$('#category').value,term=$('#search').value.toLowerCase();
+    const matches=products.filter(p=>(!type||p.category==type)&&p.name.toLowerCase().includes(term));
+    $('#results').style.display=term||type?'block':'none';$('#results').innerHTML=matches.map(p=>`<button type="button" data-id="${p.product_id}">${esc(p.name)} - ${Number(p.price).toFixed(2)}</button>`).join('');
+  };
+  $('#search').oninput=filter;$('#category').onchange=filter;$('#results').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;selected=products.find(p=>p.product_id==b.dataset.id);$('#search').value=selected.name;$('#results').style.display='none'};
+  $('#add').onclick=()=>{const qty=Number($('#quantity').value);if(!selected||qty<1)return alert('Select a product and enter a valid quantity');cart.push({...selected,qty});draw()};
+  $('#method').onchange=()=>{const g=$('#method').value=='GCash';$('#gcash').style.display=g?'flex':'none';$('#account').required=g;$('#reference').required=g};
+  $('#complete').onclick=async()=>{
+    if(!cart.length)return alert('Cart is empty');
+    const method=$('#method').value,reference=$('#reference').value.trim(),account=$('#account').value.trim(),entered=$('#customer').value.trim().toUpperCase(),customer=customers.find(c=>c.customer_identity==entered||String(c.customer_id)==entered);
+    if(entered&&!customer)return alert('Customer ID not found');
+    if(method=='GCash'&&(!account||!/^[0-9]{13}$/.test(reference)))return alert('Enter the GCash account name and a 13-digit reference number');
+    const tendered=method=='Cash'?window.prompt('Cash tendered:'):null;if(method=='Cash'&&(tendered===null||Number(tendered)<=0))return;
+    try{const total=cart.reduce((s,i)=>s+i.price*i.qty,0);if(method=='Cash'&&Number(tendered)<total)return alert('Cash tendered is not enough');
+      const sale=await api('/sales/checkout','POST',{customer_id:customer?.customer_id||null,method,account_name:account,reference_number:reference,items:cart.map(i=>({product_id:i.product_id,quantity:i.qty}))});
+      alert('Sale #'+sale.sale_id+' completed');cart=[];draw();go('sales');
+    }catch(error){alert(error.message)}
+  };draw();
+}
+function actions(key,id){return `${key=='pickups'?`<button class="small" data-action="release" data-id="${id}">Release pet</button>`:''}${user.role=='Administrator'?`<button class="small delete" data-delete="${id}">Delete</button>`:''}`}
+async function section(key){
+  const definition=definitions[key];let rows=await api('/'+key);current=key;let ownerOptions='';
+  if(key=='customers'){
+    const dogPets=(await api('/pets')).filter(p=>String(p.species).toLowerCase()==='dog');
+    const dogOwnerIds=new Set(dogPets.map(p=>String(p.customer_id)));
+    rows=rows.filter(c=>dogOwnerIds.has(String(c.customer_id)));
+  }
+  if(key=='pets'){
+    const customers=await api('/customers');
+    ownerOptions=customers.map(c=>`<option value="${esc(c.full_name)}">`).join('');
+  }
+  if(key=='pickups'){
+    main.innerHTML=`<h2>${definition.title}</h2><div class="row"><label>Fast Pet Lookup (Enter Pet ID)<input id="pickup-search" type="number" min="1" placeholder="Type Pet ID"></label><button id="pickup-search-button">Search Pet</button></div><div id="pickup-result"></div>`+table(rows,definition.columns,r=>actions(key,r.pickup_id));
+    $('#pickup-search-button').onclick=()=>{
+      const petId=$('#pickup-search').value.trim();
+      main.querySelectorAll('tbody tr').forEach(row=>row.style.display=!petId||row.cells[1].textContent.trim()==petId?'':'none');
+    };
+    return;
+  }
+  if(key=='appointments'){
+    const pets=(await api('/pets')).filter(p=>String(p.species).toLowerCase()==='dog');
+    const customers=await api('/customers'),owners=customers.filter(c=>pets.some(p=>String(p.customer_id)==String(c.customer_id)));
+    main.innerHTML=`<h2>${definition.title}</h2><div id="feedback"></div><form id="record-form"><label>Dog owner name<input id="owner" name="owner_name" placeholder="Enter customer name" autocomplete="off" required></label><label>Pet<select name="pet_id" required><option value="">Select dog</option></select></label><label>Species<input id="pet-species" value="Dog"></label><label>Breed<input id="pet-breed"></label><label>Age<input id="pet-age" type="number" min="0" step="1"></label><label>Service<select name="service">${Object.keys(servicePrices).map(s=>`<option>${esc(s)}</option>`).join('')}</select></label><label>Date and time<input name="appointment_date" type="datetime-local" required></label><label>Price<input name="price" type="number" min="120" step="0.01" required></label><button>Add grooming</button></form>`+table(rows,definition.columns,r=>actions(key,r.appointment_id));
+    const owner=$('#owner'),pet=$('[name=pet_id]');
+    const details=()=>{const p=pets.find(x=>String(x.pet_id)==pet.value);$('#pet-species').value=p?.species||'';$('#pet-breed').value=p?.breed||'';$('#pet-age').value=p?.age??''};
+    owner.oninput=()=>{const customer=owners.find(c=>c.full_name.toLowerCase()==owner.value.trim().toLowerCase());const owned=customer?pets.filter(p=>String(p.customer_id)==String(customer.customer_id)):[];pet.innerHTML=owned.map(p=>`<option value="${p.pet_id}">${esc(p.name)}</option>`).join('');details()};
+    pet.onchange=details;$('[name=service]').onchange=e=>$('[name=price]').value=servicePrices[e.target.value];$('[name=price]').value=850;
+    const now=new Date(Date.now()+1800000);now.setSeconds(0,0);$('[name=appointment_date]').value=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    bindForm(key);return;
+  }
+  main.innerHTML=`<h2>${definition.title}</h2><div id="feedback"></div>${key=='pets'?'<label>Search pet name<input id="pet-search" type="search"></label>':''}<form id="record-form">${definition.fields.map(([name,label,type='text',options])=>{
+    if(key=='pets'&&name=='customer_id')return `<label>Dog owner registration<input name="dog_owner_name" placeholder="Enter customer name" autocomplete="off" required></label>`;
+    if(type=='select')return `<label>${label}<select name="${name}" required>${options.map(o=>`<option>${esc(o)}</option>`).join('')}</select></label>`;
+    return `<label>${label}<input name="${name}" type="${type}" required ${type=='number'?'min="0" step="1"':''}></label>`;
+  }).join('')}<button>Add record</button></form>`+table(rows,definition.columns,r=>actions(key,r[definition.columns[0]]));
+  if(key=='pets')$('#pet-search').oninput=e=>{const term=e.target.value.toLowerCase();main.querySelectorAll('tbody tr').forEach(row=>row.style.display=row.textContent.toLowerCase().includes(term)?'':'none')};
+  bindForm(key);
+}
+function bindForm(key){$('#record-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries([...new FormData(e.target)].filter(([,v])=>v!=''));try{if(key=='pets'){const customers=await api('/customers');const owner=customers.find(c=>String(c.full_name).toLowerCase()==String(data.dog_owner_name).trim().toLowerCase());delete data.dog_owner_name;if(!owner)throw new Error('Dog owner must be an existing registered customer');data.customer_id=owner.customer_id}await api('/'+key,'POST',data);$('#feedback').innerHTML='<div class="alert success">Record added successfully.</div>';e.target.reset();go(key)}catch(error){$('#feedback').innerHTML=`<div class="alert error">${esc(error.message)}</div>`}}}
+async function go(key){
+  current=definitions[key]?key:null;clearInterval(window.dashboardClock);
+  document.querySelectorAll('nav a[data-key]').forEach(a=>a.classList.toggle('on',a.dataset.key==key));
+  try{({dashboard,low:lowStock,pos,sales:salesHistory,backup}[key]?await ({dashboard,low:lowStock,pos,sales:salesHistory,backup}[key])():await section(key))}catch(error){main.innerHTML=`<div class="alert error">${esc(error.message)}</div>`}
+}
+document.addEventListener('click',async e=>{
+  const deleteButton=e.target.closest('[data-delete]');if(deleteButton&&confirm('Delete this record?'))try{await api('/'+current+'/'+deleteButton.dataset.delete,'DELETE');go(current)}catch(error){alert(error.message)}
+  const action=e.target.closest('[data-action]');if(action&&action.dataset.action=='release')try{await api('/pickups/'+action.dataset.id+'/release','POST');go(current)}catch(error){alert(error.message)}
+});
+function start(){
+  if(!token){
+    let signup=false;
+    const render=()=>{
+      $('#root').innerHTML=`<div class="auth-shell"><div class="login-card"><h1>Pet Shop Grooming</h1><h2>${signup?'Create account':'Login'}</h2><form id="auth">${signup?'<label>Full name<input name="fullName" required></label>':''}<label>Username<input name="username" required minlength="3"></label><label>Password<input name="password" type="password" required minlength="${signup?6:1}"></label>${signup?' <label>Confirm password<input name="confirm" type="password" required minlength="6"></label>':''}<button>${signup?'Sign up':'Login'}</button><div id="auth-feedback"></div></form><div class="switch">${signup?'Already have an account?':'New here?'} <a id="switch">${signup?'Login':'Create an account'}</a></div></div></div>`;
+      $('#switch').onclick=()=>{signup=!signup;render()};
+      $('#auth').onsubmit=async event=>{event.preventDefault();const form=new FormData(event.target);if(signup&&form.get('password')!=form.get('confirm')){$('#auth-feedback').innerHTML='<div class="alert error">Passwords do not match</div>';return}
+        try{const data=await api(signup?'/auth/signup':'/auth/login','POST',signup?{fullName:form.get('fullName'),username:form.get('username'),password:form.get('password')}:{username:form.get('username'),password:form.get('password')});token=data.token;user=data.user;localStorage.setItem('tok',token);localStorage.setItem('me',JSON.stringify(user));start()}catch(error){$('#auth-feedback').innerHTML=`<div class="alert error">${esc(error.message)}</div>`}
+      };
+    };render();return;
+  }
+  $('#root').innerHTML=`<nav><b>Pet Shop Grooming</b><a data-key="dashboard">Dashboard</a><a data-key="pos">Point of sale</a><a data-key="products">Inventory Management</a><a data-key="low">Low stock alerts</a><a data-key="sales">Sales history</a><a data-key="customers">Customers</a><a data-key="pets">Pets and pet history</a><a data-key="appointments">Grooming schedules</a><a data-key="pickups">Pet pickup verification</a>${user.role=='Administrator'?'<a data-key="users">System users</a><a data-key="backup">Database backup and recovery</a>':''}<div class="me"><strong>${esc(user.name)}</strong><a id="logout">Sign out</a></div></nav><main></main>`;
+  main=$('main');document.querySelectorAll('nav a[data-key]').forEach(a=>a.onclick=()=>go(a.dataset.key));$('#logout').onclick=logout;go('dashboard');
+}
+start();
+</script>
+</body>
+</html>
