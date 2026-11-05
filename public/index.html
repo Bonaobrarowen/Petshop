@@ -116,7 +116,7 @@ async function section(key){
     const details=()=>{const p=pets.find(x=>String(x.pet_id)==pet.value);$('#pet-species').value=p?.species||'';$('#pet-breed').value=p?.breed||'';$('#pet-age').value=p?.age??''};
     owner.oninput=()=>{const customer=owners.find(c=>c.full_name.toLowerCase()==owner.value.trim().toLowerCase());const owned=customer?pets.filter(p=>String(p.customer_id)==String(customer.customer_id)):[];pet.innerHTML=owned.map(p=>`<option value="${p.pet_id}">${esc(p.name)}</option>`).join('');details()};
     pet.onchange=details;$('[name=service]').onchange=e=>$('[name=price]').value=servicePrices[e.target.value];$('[name=price]').value=850;
-    const now=new Date(Date.now()+1800000);now.setSeconds(0,0);$('[name=appointment_date]').value=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    const now=new Date(Date.now()+1800000);now.setSeconds(0,0);const appointmentValue=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,16);$('[name=appointment_date]').min=appointmentValue;$('[name=appointment_date]').value=appointmentValue;
     bindForm(key);return;
   }
   main.innerHTML=`<h2>${definition.title}</h2><div id="feedback"></div>${key=='pets'?'<label>Search pet name<input id="pet-search" type="search"></label>':''}<form id="record-form">${definition.fields.map(([name,label,type='text',options])=>{
