@@ -1,6 +1,6 @@
 const make = require('./model');
 const { db } = require('../../config/database');
-const User = make('user_account', 'user_id', ['username', 'password_hash', 'full_name', 'role', 'status']);
+const User = make('user_account', 'user_id', ['username', 'password_hash', 'full_name', 'role', 'customer_id', 'status']);
 const safe = 'user_id,username,full_name,role,status'; // never expose password hashes
 User.all = () => db.prepare(`SELECT ${safe} FROM user_account ORDER BY user_id`).all();
 User.get = id => db.prepare(`SELECT ${safe} FROM user_account WHERE user_id=?`).get(id);

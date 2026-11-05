@@ -5,6 +5,32 @@ if (fs.existsSync(file + '.restore')) fs.renameSync(file + '.restore', file); //
 const db = new Database(file);
 db.pragma('foreign_keys = ON');
 db.exec(fs.readFileSync(path.join(__dirname, '..', 'database', 'schema.sql'), 'utf8'));
+const userSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='user_account'").get()?.sql || '';
+if (!userSchema.includes("'Customer'")) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    CREATE TABLE user_account_customer_migration (
+      user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('Administrator','Staff','Customer')) DEFAULT 'Staff',
+      customer_id INTEGER REFERENCES customer(customer_id),
+      status TEXT NOT NULL DEFAULT 'Active'
+    );
+  `);
+  const columns = db.prepare("PRAGMA table_info(user_account)").all();
+  if (columns.some(c => c.name === 'customer_id')) {
+    db.exec(`INSERT INTO user_account_customer_migration(user_id,username,password_hash,full_name,role,customer_id,status)
+      SELECT user_id,username,password_hash,full_name,role,customer_id,status FROM user_account`);
+  } else {
+    db.exec(`INSERT INTO user_account_customer_migration(user_id,username,password_hash,full_name,role,status)
+      SELECT user_id,username,password_hash,full_name,role,status FROM user_account`);
+  }
+  db.exec('DROP TABLE user_account; ALTER TABLE user_account_customer_migration RENAME TO user_account; PRAGMA foreign_keys = ON;');
+} else if (!db.prepare('PRAGMA table_info(user_account)').all().some(c => c.name === 'customer_id')) {
+  db.exec('ALTER TABLE user_account ADD COLUMN customer_id INTEGER REFERENCES customer(customer_id)');
+}
 const customerColumns = db.prepare("PRAGMA table_info(customer)").all();
 if (!customerColumns.some(c => c.name === 'customer_identity')) {
   db.exec('ALTER TABLE customer ADD COLUMN customer_identity TEXT');

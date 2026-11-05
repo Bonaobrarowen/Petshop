@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Pet Appointments</title>
+  <style>
+    :root{--accent:#14606e;--border:#dce3e8;--text:#18212b;--muted:#66717d}*{box-sizing:border-box}body{margin:0;background:#eef4f5;color:var(--text);font:15px/1.5 system-ui,sans-serif}header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:white;border-bottom:1px solid var(--border)}header b{font-size:18px}button{border:0;border-radius:6px;background:var(--accent);color:white;padding:9px 14px;font:inherit;cursor:pointer}.wrap{max-width:1000px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{background:white;border:1px solid var(--border);border-radius:10px;padding:20px}form{display:grid;grid-template-columns:1fr 1fr;gap:12px}label{display:flex;flex-direction:column;color:var(--muted);font-size:13px}input,select{padding:9px;border:1px solid var(--border);border-radius:6px;font:inherit;width:100%}.full{grid-column:1/-1}table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}th{color:var(--muted)}.empty,.message{color:var(--muted)}.error{color:#b3261e}@media(max-width:700px){header{padding:12px}.grid{grid-template-columns:1fr}form{grid-template-columns:1fr}.full{grid-column:auto}}
+  </style>
+</head>
+<body>
+<header><b>Pet Shop Grooming</b><button id="logout">Sign out</button></header>
+<main class="wrap">
+  <h1>My Pet Appointments</h1>
+  <div class="grid">
+    <section class="card">
+      <h2>Book an appointment</h2>
+      <form id="booking">
+        <label>Full name<input name="full_name" required></label>
+        <label>Mobile number<input name="phone" pattern="09[0-9]{9}" maxlength="11" required></label>
+        <label class="full">Dog name<input name="pet_name" required></label>
+        <label>Breed<input name="breed" required></label>
+        <label>Dog age<input name="age" type="number" min="0" required></label>
+        <label class="full">Service<select name="service" required><option value="">Select service</option><option>Full Grooming Package</option><option>Basic Shower &amp; Blow Dry</option><option>Nail Trimming &amp; Filing</option><option>Ear Cleaning &amp; Plucking</option><option>Anti-Flea &amp; Tick Treatment</option><option>De-Shedding &amp; De-Matting</option><option>Teeth Brushing &amp; Breath Care</option><option>Puppy / Kitten First Bath</option></select></label>
+        <label class="full">Date and time<input name="appointment_date" type="datetime-local" required></label>
+        <input type="hidden" name="email">
+        <input type="hidden" name="address">
+        <button class="full">Submit appointment request</button>
+        <p class="full message" id="message"></p>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Appointment history</h2>
+      <div id="appointments"></div>
+    </section>
+  </div>
+</main>
+<script>
+const token=localStorage.getItem('tok'),user=JSON.parse(localStorage.getItem('me')||'null');
+const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+if(!token||!user||user.role!='Customer'){location.href='/';}
+async function api(path,method='GET',body){const response=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json().catch(()=>({}));if(response.status==401){localStorage.removeItem('tok');localStorage.removeItem('me');location.href='/'}if(!response.ok)throw new Error(data.error||'Request failed');return data}
+async function load(){
+  const profile=await api('/customer/profile');const form=document.querySelector('#booking');form.elements.full_name.value=profile.full_name||'';form.elements.phone.value=profile.phone||'';form.elements.email.value=profile.email||'';form.elements.address.value=profile.address||'';
+  const rows=await api('/customer/appointments');
+  document.querySelector('#appointments').innerHTML=rows.length?`<table><thead><tr><th>Dog</th><th>Service</th><th>Date</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pet_name)}</td><td>${esc(r.service)}</td><td>${esc(r.appointment_date)}</td><td>${esc(r.status)}</td></tr>`).join('')}</tbody></table>`:'<p class="empty">No appointments yet.</p>';
+}
+const date=document.querySelector('[name=appointment_date]'),minimum=new Date(Date.now()+30*60*1000);minimum.setSeconds(0,0);date.min=new Date(minimum-minimum.getTimezoneOffset()*60000).toISOString().slice(0,16);
+document.querySelector('#booking').onsubmit=async e=>{
+  e.preventDefault();const message=document.querySelector('#message');message.className='message';message.textContent='Submitting...';
+  try{const data=Object.fromEntries(new FormData(e.target));const result=await api('/public/appointments','POST',data);message.textContent=result.message;e.target.reset();load()}catch(error){message.className='message error';message.textContent=error.message}
+};
+document.querySelector('#logout').onclick=()=>{localStorage.removeItem('tok');localStorage.removeItem('me');location.href='/'};
+load().catch(error=>document.querySelector('#appointments').innerHTML=`<p class="error">${esc(error.message)}</p>`);
+</script>
+</body>
+</html>

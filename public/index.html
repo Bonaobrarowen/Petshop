@@ -33,6 +33,7 @@ async function api(path,method='GET',body){
   if(!response.ok)throw new Error(data.error||'Request failed');
   return data;
 }
+if(user.role=='Customer'){location.href='/customer-dashboard.html';return}
 function logout(){localStorage.removeItem('tok');localStorage.removeItem('me');token=null;user=null;start()}
 function table(rows,columns,actions){
   if(!rows.length)return '<div class="empty">Nothing here yet.</div>';
@@ -141,10 +142,10 @@ function start(){
   if(!token){
     let signup=false;
     const render=()=>{
-      $('#root').innerHTML=`<div class="auth-shell"><div class="login-card"><h1>Pet Shop Grooming</h1><h2>${signup?'Create account':'Login'}</h2><form id="auth">${signup?'<label>Full name<input name="fullName" required></label>':''}<label>Username<input name="username" required minlength="3"></label><label>Password<input name="password" type="password" required minlength="${signup?6:1}"></label>${signup?' <label>Confirm password<input name="confirm" type="password" required minlength="6"></label>':''}<button>${signup?'Sign up':'Login'}</button><div id="auth-feedback"></div></form><div class="switch">${signup?'Already have an account?':'New here?'} <a id="switch">${signup?'Login':'Create an account'}</a></div></div></div>`;
+      $('#root').innerHTML=`<div class="auth-shell"><div class="login-card"><h1>Pet Shop Grooming</h1><h2>${signup?'Customer registration':'Login'}</h2><form id="auth">${signup?'<label>Full name<input name="fullName" required></label><label>Mobile number<input name="phone" required pattern="09[0-9]{9}" maxlength="11"></label><label>Email (optional)<input name="email" type="email"></label><label>Address (optional)<input name="address"></label>':''}<label>Username<input name="username" required minlength="3"></label><label>Password<input name="password" type="password" required minlength="${signup?6:1}"></label>${signup?' <label>Confirm password<input name="confirm" type="password" required minlength="6"></label>':''}<button>${signup?'Create customer account':'Login'}</button><div id="auth-feedback"></div></form><div class="switch">${signup?'Already have an account?':'New here?'} <a id="switch">${signup?'Login':'Create an account'}</a></div></div></div>`;
       $('#switch').onclick=()=>{signup=!signup;render()};
       $('#auth').onsubmit=async event=>{event.preventDefault();const form=new FormData(event.target);if(signup&&form.get('password')!=form.get('confirm')){$('#auth-feedback').innerHTML='<div class="alert error">Passwords do not match</div>';return}
-        try{const data=await api(signup?'/auth/signup':'/auth/login','POST',signup?{fullName:form.get('fullName'),username:form.get('username'),password:form.get('password')}:{username:form.get('username'),password:form.get('password')});token=data.token;user=data.user;localStorage.setItem('tok',token);localStorage.setItem('me',JSON.stringify(user));start()}catch(error){$('#auth-feedback').innerHTML=`<div class="alert error">${esc(error.message)}</div>`}
+        try{const data=await api(signup?'/auth/signup':'/auth/login','POST',signup?{fullName:form.get('fullName'),phone:form.get('phone'),email:form.get('email'),address:form.get('address'),username:form.get('username'),password:form.get('password')}:{username:form.get('username'),password:form.get('password')});token=data.token;user=data.user;localStorage.setItem('tok',token);localStorage.setItem('me',JSON.stringify(user));if(user.role=='Customer'){location.href='/customer-dashboard.html';return}start()}catch(error){$('#auth-feedback').innerHTML=`<div class="alert error">${esc(error.message)}</div>`}
       };
     };render();return;
   }

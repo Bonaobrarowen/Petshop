@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS user_account (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   full_name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('Administrator','Staff')) DEFAULT 'Staff',
+  role TEXT NOT NULL CHECK (role IN ('Administrator','Staff','Customer')) DEFAULT 'Staff',
+  customer_id INTEGER REFERENCES customer(customer_id),
   status TEXT NOT NULL DEFAULT 'Active'
 );
 CREATE TABLE IF NOT EXISTS customer (
